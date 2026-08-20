@@ -1,0 +1,38 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Security headers. These are enforced by the browser on every response, so
+# they protect the app even against bugs in its own JavaScript.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Content Security Policy. The important clause is the last one:
+    # object-src 'none' plus frame-ancestors 'none' means no plugin content
+    # and no other site may frame this app (clickjacking protection).
+    #
+    # 'unsafe-eval' and 'unsafe-inline' are required because the app compiles
+    # its JSX in the browser with Babel standalone. That is a real weakening
+    # of the policy — if you ever move to a build step, drop both and the CSP
+    # becomes genuinely strong.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://unpkg.com; frame-src blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+    # Stops the browser second-guessing declared content types, which is what
+    # turns an "image" upload into an executed script.
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # Force HTTPS for two years, including subdomains.
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+
+    # Revoke hardware access the app never uses.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+
+    Cross-Origin-Opener-Policy = "same-origin"
+
+# Never let a browser or CDN cache an assistant response.
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Cache-Control = "no-store"
