@@ -1,0 +1,10 @@
+{
+  "name": "FinLume Personal Finance Dashboard",
+  "short_name": "FinLume",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#4b3f9e",
+  "theme_color": "#372e86",
+  "description": "A private personal finance dashboard for accounts, budgets, goals, liabilities and financial reviews."
+}
