@@ -28,8 +28,8 @@ export function useFinanceSyncStatus(userId) {
 
 export function FinanceSyncStatus({ userId }) {
   const state = useFinanceSyncStatus(userId);
-  const savedTime = state.at && !Number.isNaN(Date.parse(state.at)) ? new Date(state.at).toLocaleString() : "";
-  const label = state.status === "saving" ? "Saving Finance data…" : state.status === "error" ? "Finance save failed" : state.at ? `Finance data saved${savedTime ? ` · ${savedTime}` : ""}` : "Finance data ready";
+  if (state.status !== "saving" && state.status !== "error") return null;
+  const label = state.status === "saving" ? "Saving Finance data…" : "Finance save failed";
   return React.createElement("div", { role: state.status === "error" ? "alert" : "status", "aria-live": state.status === "error" ? "assertive" : "polite", className: `px-4 md:px-8 py-2 text-[12px] border-b ${state.status === "error" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-indigo-50 border-indigo-100 text-indigo-800"}` },
     React.createElement("span", { className: "font-semibold" }, label),
     state.status === "error" && React.createElement("span", { className: "ml-2" }, state.message, " Check your changes before refreshing the page.")
