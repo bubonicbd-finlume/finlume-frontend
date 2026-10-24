@@ -133,8 +133,9 @@
   @media (forced-colors: active) {
     .lg-lens, .lg-seg-pill { forced-color-adjust: none; border: 1px solid Highlight; }
   }
-  .krn-privacy-blur .krn-amount { filter: blur(6px); transition: filter 160ms ease; }
-  .krn-privacy-blur .krn-amount:hover, .krn-privacy-blur .krn-amount:focus-within { filter: none; }
+  .krn-privacy-blur .krn-amount { filter: blur(7px); transition: filter 140ms ease; cursor: pointer; }
+  .krn-privacy-blur .krn-amount:hover, .krn-privacy-blur .krn-amount:focus, .krn-privacy-blur .krn-amount:focus-within { filter: none; }
+  .krn-privacy-blur.krn-amounts-revealed .krn-amount { filter: none; }
 
   /* ---- Dark theme ----
      Scoped overrides rather than a full token rewrite: the app is built on
@@ -570,7 +571,7 @@
     background: rgba(148,163,184,0.38);
     border: 1px solid rgba(255,255,255,0.45);
     box-shadow: inset 0 2px 4px rgba(15,23,42,0.18), inset 0 -1px 0 rgba(255,255,255,0.35);
-    transition: background-color 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
     -webkit-tap-highlight-color: transparent;
   }
   .krn-large-taps button.lg-switch { height: var(--track-h); min-height: var(--track-h); }
@@ -589,13 +590,12 @@
     box-shadow: 0 2px 6px rgba(15,23,42,0.32), inset 0 1px 0 rgba(255,255,255,0.9);
     color: #64748b;
     transform: translateX(var(--pad));
-    transition: transform 0.7s var(--lg-spring), width 0.7s var(--lg-spring), background 0.45s ease, box-shadow 0.45s ease, color 0.45s ease;
+    transition: transform 180ms ease-out, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
   }
   .lg-switch[data-on="1"] .lg-switch-knob { transform: translateX(calc(var(--track-w) - var(--kw) - var(--pad) - 2px)); color: color-mix(in srgb, var(--sw) 85%, black); }
   /* pressure: the bead swells under your finger, more with a firmer press */
-  .lg-switch:active { --kw: calc(24px + 9px * var(--lg-press, 0.55)); }
-  /* liquid stretch while travelling */
-  .lg-switch[data-moving="1"] .lg-switch-knob { animation: lgKnobStretch 0.62s cubic-bezier(0.3, 0.7, 0.4, 1); }
+  .lg-switch:active .lg-switch-knob { scale: 1.06; }
+  /* The knob follows the state directly, without the extra stretch cycle. */
   @keyframes lgKnobStretch {
     0% { scale: 1 1; } 28% { scale: 1.42 0.86; } 62% { scale: 0.94 1.06; } 100% { scale: 1 1; }
   }
@@ -929,3 +929,66 @@ html.lg-smoke .nt-editor.is-focus{background:#2a2158}
 .lg-topbar .lg-search>svg{flex:0 0 auto}
 .lg-topbar .lg-search button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%}
 .lg-topbar .lg-search button:hover{background:rgba(255,255,255,.14)}
+@media (max-width:1199px){.fin-mobile-title{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+
+.fin-dashboard-dates-inline{display:inline-flex}
+@media(max-width:359px){.fin-dashboard-dates-inline{display:none}}
+@media(max-width:280px){
+  .lg-topbar{height:auto!important;min-height:76px;flex-wrap:wrap;gap:.25rem;padding-top:.5rem;padding-bottom:.5rem}
+  .fin-topbar-primary{width:100%}
+  .fin-topbar-actions{width:100%;flex-wrap:nowrap;justify-content:space-between;gap:.25rem}
+  .fin-section-toggle{width:80px!important}
+  .fin-section-toggle button{font-size:9px!important}
+  .fin-mobile-nav-btn-timeline,.fin-mobile-nav-btn-settings{display:none!important}
+  .fin-mobile-more-dialog .grid{grid-template-columns:minmax(0,1fr)}
+  .fin-mobile-more-header{flex-wrap:wrap;gap:0.25rem}
+}
+
+/* Category choices sit above the transaction scroller and stay opaque in glass mode. */
+.fin-category-menu{background:linear-gradient(155deg,#fff,#f4f2ff);color:#334155;border-color:#d9d5ee;box-shadow:0 22px 48px rgba(31,25,80,.28),inset 0 1px 0 rgba(255,255,255,.85)}
+.fin-category-menu-item{width:100%;min-height:34px;padding:7px 11px;border-radius:9px;line-height:1.3;transition:background-color .12s ease,color .12s ease}
+.fin-category-menu-item:hover,.fin-category-menu-item:focus-visible{background:#e9e5ff;outline:2px solid #a5b4fc;outline-offset:-2px}
+.fin-category-menu-item[aria-checked="true"]{background:#ede9fe;color:#4338ca;font-weight:700}
+.fin-category-menu::-webkit-scrollbar{width:7px}
+.fin-category-menu::-webkit-scrollbar-thumb{background:#b5acd9;border-radius:8px}
+html.lg-smoke .fin-category-menu{background:linear-gradient(155deg,#32296c,#221a51)!important;color:#f5f3ff;border-color:#786eae;box-shadow:0 24px 52px rgba(6,3,24,.65),inset 0 1px 0 rgba(255,255,255,.16)}
+html.lg-smoke .fin-category-menu-item:hover,html.lg-smoke .fin-category-menu-item:focus-visible{background:#493e85;outline-color:#a99df1}
+html.lg-smoke .fin-category-menu-item[aria-checked="true"]{background:#514492;color:#fff}
+html.lg-smoke .fin-category-menu::-webkit-scrollbar-thumb{background:#7165a5}
+html.krn-dark .fin-category-menu{background:linear-gradient(155deg,#263449,#1e293b);color:#f8fafc;border-color:#64748b}
+html.krn-dark .fin-category-menu-item:hover,html.krn-dark .fin-category-menu-item:focus-visible{background:#334155}
+html.krn-dark .fin-category-menu-item[aria-checked="true"]{background:#394b66;color:#e0e7ff}
+
+/* The rule confirmation must be readable above transaction rows in every theme. */
+.fin-rule-suggestion{background:#fff!important;border-color:#c7c0f3!important;box-shadow:0 24px 56px rgba(25,18,70,.38)!important}
+.fin-rule-preview{background:#f2efff!important;border-color:#d8d1fc!important}
+html.lg-smoke .fin-rule-suggestion.lg-glass-card.bg-white{background:linear-gradient(155deg,#352b73,#211a50)!important;border-color:#8175b9!important;box-shadow:0 30px 68px rgba(6,3,24,.72),inset 0 1px 0 rgba(255,255,255,.16)!important;backdrop-filter:none!important}
+html.lg-smoke .fin-rule-preview.bg-indigo-50{background:#453980!important;border-color:#7064ac!important;color:#f5f3ff!important}
+html.krn-dark .fin-rule-suggestion{background:#1e293b!important;border-color:#64748b!important}
+html.krn-dark .fin-rule-preview{background:#334155!important;border-color:#64748b!important;color:#f8fafc!important}
+
+/* Shared readable surface for menus and dialogs across all FinLume themes. */
+.fin-overlay-surface{background:#fff!important;color:#263044;border:1px solid #d8d3ee;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:0 24px 56px rgba(25,18,70,.34)}
+html.lg-smoke .fin-overlay-surface{background:#2a215f!important;color:#f7f5ff!important;border-color:#8073b9!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:0 30px 68px rgba(6,3,24,.68)!important}
+html.krn-dark .fin-overlay-surface{background:#1e293b!important;color:#f8fafc!important;border-color:#64748b!important}
+.fin-overlay-surface :focus-visible,.fin-history-panel :focus-visible,.fin-history-details :focus-visible{outline:2px solid #7c6ee8;outline-offset:2px}
+html.lg-smoke .fin-overlay-surface :focus-visible,html.lg-smoke .fin-history-panel :focus-visible{outline-color:#c4b5fd}
+.fin-history-summary{cursor:pointer;font-size:13px;font-weight:600;padding:9px 13px;border-radius:12px;border:1px solid #c7c0ef;background:#f2efff;color:#4338a1;width:max-content;max-width:100%}
+.fin-history-panel{background:#fff;color:#334155;border-color:#d8d3ee}
+.fin-history-entry{background:#f8f7ff;border-color:#e3dff5}
+.fin-history-action{min-height:36px;padding:6px 11px;border-radius:10px;border:1px solid #bbb1e8;background:#eeeaff;color:#4338a1;font-size:12px;font-weight:600}
+.fin-history-action:hover{background:#e1dbff}
+.fin-history-danger{border-color:#f4b4bd;background:#fff1f2;color:#9f1239}
+.fin-history-danger:hover{background:#ffe4e6}
+html.lg-smoke .fin-history-summary,html.lg-smoke .fin-history-panel{background:#2a215f;color:#f7f5ff;border-color:#8073b9}
+html.lg-smoke .fin-history-entry{background:#342b70;border-color:#7367ac}
+html.lg-smoke .fin-history-action{background:#493d87;color:#f7f5ff;border-color:#9185c9}
+html.lg-smoke .fin-history-danger{background:#633454;color:#ffe4e6;border-color:#aa6989}
+html.krn-dark .fin-history-summary,html.krn-dark .fin-history-panel{background:#1e293b;color:#f8fafc;border-color:#64748b}
+html.krn-dark .fin-history-entry{background:#29384d;border-color:#64748b}
+html.krn-dark .fin-history-action{background:#334155;color:#f8fafc;border-color:#64748b}
+html.krn-dark .fin-history-danger{background:#4c2639;color:#ffe4e6;border-color:#9f586b}
+.fin-audit-trail{background:#f8f7ff;border-color:#ddd8f2;color:#334155}
+html.lg-smoke .fin-audit-trail{background:#342b70;border-color:#7367ac;color:#f7f5ff}
+html.krn-dark .fin-audit-trail{background:#29384d;border-color:#64748b;color:#f8fafc}
+@media(max-width:400px){.fin-history-action{width:100%}.fin-history-entry>div:first-child{display:block}.fin-history-entry>div:first-child>div:last-child{margin-top:8px}.ledgerly-modal-panel{max-width:calc(100vw - 16px)}}

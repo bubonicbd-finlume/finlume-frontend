@@ -6,5 +6,13 @@
   "display": "standalone",
   "background_color": "#4b3f9e",
   "theme_color": "#372e86",
-  "description": "A private personal finance dashboard for accounts, budgets, goals, liabilities and financial reviews."
+  "description": "A private personal finance dashboard for accounts, budgets, goals, liabilities and financial reviews.",
+  "icons": [
+    {
+      "src": "/finlume-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
