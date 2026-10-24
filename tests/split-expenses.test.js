@@ -158,6 +158,7 @@ test("Split group overview rejects a failed financial read", async () => {
   const values = {
     ksComputeBalances: { people: [], simplified: [] },
     ksListExpenses: [{ id: "expense-1" }],
+    ksListGuestExpenses: [{ id: "guest-expense-1", amount: 20, category: "Food", date: "2026-10-20", payerId: "me", splits: [] }],
     ksListSettlements: [{ id: "settlement-1" }],
   };
   function withFailure(failedCall) {
@@ -167,6 +168,7 @@ test("Split group overview rejects a failed financial read", async () => {
           if (key === failedCall) throw new Error(`${key} unavailable`);
           return values[key];
         };
+        if (key === "ksGuestExpenseToDisplay") return expense => ({ id: expense.id, amount: expense.amount, category: expense.category, expense_date: expense.date, isLocalGuest: true });
         return target[key];
       },
     });
@@ -174,7 +176,7 @@ test("Split group overview rejects a failed financial read", async () => {
   const { ksLoadGroupOverviewData } = createSplitExpenses(withFailure(null));
   assert.deepEqual(await ksLoadGroupOverviewData("group-1"), {
     balances: values.ksComputeBalances,
-    expenses: values.ksListExpenses,
+    expenses: [...values.ksListExpenses, { id: "guest-expense-1", amount: 20, category: "Food", expense_date: "2026-10-20", isLocalGuest: true }],
     settlements: values.ksListSettlements,
   });
   for (const call of Object.keys(values)) {

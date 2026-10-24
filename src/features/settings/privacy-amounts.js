@@ -11,7 +11,11 @@ export function usePrivacyAmounts(enabled) {
     const pending = new Set([root]);
     const scan = () => {
       frame = 0;
-      const targets = [...pending];
+      const targets = [...pending].filter(target => {
+        if (!target || target !== root && !root.contains(target)) return false;
+        for (let parent = target.parentElement; parent; parent = parent.parentElement) if (pending.has(parent)) return false;
+        return true;
+      });
       pending.clear();
       for (const target of targets) {
       const candidates = target.matches?.("p, span, div, td, strong") ? [target, ...target.querySelectorAll("p, span, div, td, strong")] : target.querySelectorAll?.("p, span, div, td, strong") || [];

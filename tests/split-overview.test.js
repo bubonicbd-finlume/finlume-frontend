@@ -19,6 +19,15 @@ const deps = new Proxy({
     amount: 100, category: "Food", description: "Lunch", payer_id: "me", payer_name: "Me",
     splits_json: [{ user_id: "me" }, { user_id: "friend" }],
   }],
+  ksListGuestExpenses: async () => [{ id: "guest-expense", date: "2026-10-14", amount: 20, category: "Food", description: "Shared tea", payerId: "me", splits: [{ id: "me", share: 10 }, { id: "guest:one", share: 10 }] }],
+  ksListGuestSettlements: async () => [{ fromId: "guest:one", toId: "me", amount: 10, settledAt: "2026-10-15T10:00:00Z", deleted: false }],
+  ksListGuests: async () => [{ id: "guest:one", name: "Test Guest" }],
+  ksComputeGuestSettlement: (participants, expenses, settlements) => {
+    const net = new Map(participants.map(person => [person.id, 0]));
+    for (const expense of expenses) { net.set(expense.payerId, net.get(expense.payerId) + expense.amount); for (const share of expense.splits) net.set(share.id, net.get(share.id) - share.share); }
+    for (const settlement of settlements) { net.set(settlement.fromId, net.get(settlement.fromId) + settlement.amount); net.set(settlement.toId, net.get(settlement.toId) - settlement.amount); }
+    return { net };
+  },
   ksListSettlements: async () => [{ amount: 25, created_at: "2026-10-13T10:00:00Z" }],
 }, { get(target, key) { return key in target ? target[key] : icon; } });
 
@@ -37,14 +46,14 @@ test("Split overview combines group balances, monthly spending and settlements",
   assert.equal(data.groups[0].net, 75);
   assert.equal(data.youAreOwed, 75);
   assert.equal(data.youOwe, 0);
-  assert.equal(data.totalThisMonth, 100);
-  assert.equal(data.settledThisMonth, 25);
-  assert.deepEqual(data.categoryBreakdown, [{ category: "Food", amount: 100 }]);
-  assert.equal(data.activity[0].description, "Lunch");
+  assert.equal(data.totalThisMonth, 120);
+  assert.equal(data.settledThisMonth, 35);
+  assert.deepEqual(data.categoryBreakdown, [{ category: "Food", amount: 120 }]);
+  assert.equal(data.activity[0].description, "Shared tea");
 });
 
 test("Split overview refuses to present partial totals as zero", async () => {
-  for (const failedCall of ["ksComputeBalances", "ksListExpenses", "ksListSettlements"]) {
+  for (const failedCall of ["ksComputeBalances", "ksListExpenses", "ksListGuestExpenses", "ksListGuestSettlements", "ksListGuests", "ksListSettlements"]) {
     const failedDeps = new Proxy(deps, {
       get(target, key) {
         if (key === failedCall) return async () => { throw new Error(`${failedCall} unavailable`); };
