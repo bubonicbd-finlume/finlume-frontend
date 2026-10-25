@@ -943,15 +943,22 @@ html.lg-smoke .nt-editor.is-focus{background:#2a2158}
 
 .fin-dashboard-dates-inline{display:inline-flex}
 @media(max-width:359px){.fin-dashboard-dates-inline{display:none}}
+@media(max-width:767px){
+  .fin-mobile-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:stretch;gap:2px;padding:4px 4px calc(4px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(33,25,79,.94),rgba(20,14,54,.98));border-top:1px solid rgba(228,220,255,.3);box-shadow:0 -8px 24px rgba(9,5,35,.28)}
+  .fin-mobile-nav-item{position:relative;min-width:0;min-height:56px;margin:0;border:1px solid transparent;border-radius:15px;line-height:1.15;transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease}
+  .fin-mobile-nav-item svg{flex:none}
+  .fin-mobile-nav-item span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fin-mobile-nav-item.is-active{background:linear-gradient(145deg,rgba(230,222,255,.34),rgba(112,96,219,.33));border-color:rgba(242,236,255,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -1px 0 rgba(196,181,253,.12),0 3px 12px rgba(15,9,56,.32);text-shadow:0 1px 3px rgba(20,11,65,.5)}
+  .fin-mobile-nav-item:focus-visible{outline:2px solid #ddd6fe;outline-offset:-3px}
+  .fin-mobile-nav-item:not(.is-active):active{background:rgba(255,255,255,.12)}
+}
+@media(prefers-reduced-motion:reduce){.fin-mobile-nav-item{transition:none}}
 @media(max-width:280px){
   .lg-topbar{height:auto!important;min-height:76px;flex-wrap:wrap;gap:.25rem;padding-top:.5rem;padding-bottom:.5rem}
   .fin-topbar-primary{width:100%}
   .fin-topbar-actions{width:100%;flex-wrap:nowrap;justify-content:space-between;gap:.25rem}
   .fin-section-toggle{width:80px!important}
   .fin-section-toggle button{font-size:9px!important}
-  .fin-mobile-nav-item{position:relative;margin:3px 2px;min-width:0;border:1px solid transparent;border-radius:14px;transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease}
-  .fin-mobile-nav-item.is-active{background:linear-gradient(145deg,rgba(210,201,255,.32),rgba(106,91,214,.28));border-color:rgba(238,233,255,.48);box-shadow:inset 0 1px rgba(255,255,255,.28),0 3px 12px rgba(20,11,65,.28)}
-  @media (prefers-reduced-motion:reduce){.fin-mobile-nav-item{transition:none}}
   .fin-mobile-more-dialog .grid{grid-template-columns:minmax(0,1fr)}
   .fin-mobile-more-header{flex-wrap:wrap;gap:0.25rem}
 }
