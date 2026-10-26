@@ -1,3 +1,5 @@
+import { uniqueSchedules } from "../recurring/calculations.js";
+
 function amount(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -78,8 +80,8 @@ export function averageCompletedMonthIncome(transactions, today, count = 3, opti
 
 export function envelopeSummary({ budgets, recurring, subscriptions, plannedIncome, suggestedIncome, monthlyEquivalent }) {
   const budgetTotal = (budgets || []).reduce((sum, budget) => sum + amount(budget.limit), 0);
-  const commitments = [...(recurring || []), ...(subscriptions || [])].filter(item => item.active !== false);
-  const recurringTotal = commitments.reduce((sum, item) => sum + amount(monthlyEquivalent(item.amount, item.cadence)), 0);
+  const commitments = uniqueSchedules({ recurring, subscriptions }).filter(item => item.active !== false && item.type !== "income");
+  const recurringTotal = commitments.reduce((sum, item) => sum + amount(monthlyEquivalent(item.amount, item.cadence, item.intervalDays)), 0);
   const income = amount(plannedIncome) || amount(suggestedIncome);
 
   return {
@@ -89,3 +91,4 @@ export function envelopeSummary({ budgets, recurring, subscriptions, plannedInco
     unallocated: income - budgetTotal - recurringTotal
   };
 }
+

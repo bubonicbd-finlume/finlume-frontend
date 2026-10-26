@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { financeNavGroup, pushFinanceTab, readFinanceTab } from "../src/platform/finance-navigation.js";
+import { FINANCE_NAV_GROUPS, financeBreadcrumb, financeNavGroup, pushFinanceTab, readFinanceTab } from "../src/platform/finance-navigation.js";
 
 test("Finance navigation preserves existing query values and supports back state", () => {
   const tabs = [{ id: "dashboard" }, { id: "timeline" }, { id: "settings" }];
@@ -13,5 +13,11 @@ test("Finance navigation preserves existing query values and supports back state
   windowObject.location.search = "?source=test&fin=settings";
   assert.equal(readFinanceTab(windowObject.location, tabs), "settings");
   assert.equal(financeNavGroup("timeline"), "Planning");
-  assert.equal(financeNavGroup("data-health"), "Account");
+  assert.equal(financeNavGroup("data-health"), "Settings");
+});
+
+test("Finance navigation exposes formal groups and breadcrumbs", () => {
+  assert.deepEqual(FINANCE_NAV_GROUPS, ["Dashboard", "Transactions", "Planning", "Liabilities", "Wealth", "Reports", "Settings"]);
+  assert.equal(financeNavGroup("liabilities"), "Liabilities");
+  assert.deepEqual(financeBreadcrumb("reports", [{ id: "reports", label: "Reports" }]), ["Reports", "Reports"]);
 });

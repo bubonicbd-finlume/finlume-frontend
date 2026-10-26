@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requiredPayment, effectivePayment, payoffProjection } from "../src/features/liabilities/calculations.js";
+import { requiredPayment, effectivePayment, payoffProjection, amortizationSchedule, monthsRemaining } from "../src/features/liabilities/calculations.js";
 import { contributionPlan } from "../src/features/goals/calculations.js";
 import { estimatedTax } from "../src/features/tax/calculations.js";
 import { addDays, nextMonthlyDueDate, currentMonthSummary, findBudgetWarnings } from "../src/features/dashboard/calculations.js";
 import { averageCompletedMonthIncome, buildBudgetRows, categorySpendForMonth, envelopeSummary } from "../src/features/budgets/calculations.js";
-import { detectAmountAnomalies, detectCandidates, monthlyEquivalent, nextOccurrence } from "../src/features/recurring/calculations.js";
+import { detectAmountAnomalies, detectCandidates, monthlyEquivalent, nextOccurrence, uniqueSchedules } from "../src/features/recurring/calculations.js";
 import { averageMonthlyIncome, cashFlowForecast, expenseForecast, nextScheduledDate } from "../src/features/financial-review/calculations.js";
 import { allocationDrift, combinedNetWorth, concentrationChecks, investmentSummary, maturityInfo } from "../src/features/wealth/calculations.js";
 import { financialSummary, monthlyInsight, periodBounds } from "../src/features/transactions/calculations.js";
@@ -16,9 +16,48 @@ test("liability payment clears a zero-interest balance by its end date", () => {
   assert.equal(effectivePayment(account, "2026-10-17"), 1000);
 });
 
+test("saved lender payment overrides the calculated end-date estimate", () => {
+  const loan = { balance: 12000, interestRate: 0, endDate: "2027-10-17", minPayment: 800 };
+  assert.equal(requiredPayment(loan, "2026-10-17"), 1000);
+  assert.equal(effectivePayment(loan, "2026-10-17"), 800);
+});
+
+test("contractual repayment frequencies normalize to a monthly planning amount", () => {
+  assert.equal(effectivePayment({ balance: 10000, minPayment: 100, repaymentFrequency: "weekly" }, "2026-10-26"), 100 * 52 / 12);
+  assert.equal(effectivePayment({ balance: 10000, minPayment: 300, repaymentFrequency: "quarterly" }, "2026-10-26"), 100);
+});
+
+test("remaining monthly payment count provides a repayment estimate", () => {
+  assert.equal(requiredPayment({ balance: 1200, interestRate: 0, outstandingPayments: 12 }, "2026-10-25"), 100);
+});
+
+test("loan and goal deadlines use calendar months and reject invalid dates", () => {
+  assert.equal(monthsRemaining("2028-02-29", "2028-01-31"), 1);
+  assert.equal(monthsRemaining("2027-02-29", "2027-01-31"), null);
+  assert.equal(contributionPlan({ target: 100, dueDate: "2028-02-29" }, 0, "2028-01-31").months, 1);
+  assert.equal(contributionPlan({ target: 100, dueDate: "2027-02-29" }, 0, "2027-01-31"), null);
+});
+
 test("liability payoff detects a payment below monthly interest", () => {
   const result = payoffProjection({ balance: 100000, interestRate: 24 }, 1000, "2026-10-17");
   assert.equal(result.neverPaysOff, true);
+});
+
+test("amortization schedule handles zero interest, extra payments and minor units", () => {
+  const regular = amortizationSchedule({ balance: 100.01, interestRate: 0 }, "2026-10-17", { payment: 33.34 });
+  assert.deepEqual(regular.rows.map(row => row.payment), [33.34, 33.34, 33.33]);
+  assert.equal(regular.rows.at(-1).balance, 0);
+  const accelerated = amortizationSchedule({ balance: 100.01, interestRate: 0 }, "2026-10-17", { payment: 33.34, extraPayment: 20 });
+  assert.equal(accelerated.months, 2);
+  assert.equal(accelerated.rows.reduce((sum, row) => sum + Math.round(row.principal * 100), 0), 10001);
+});
+
+test("amortization schedule supports a variable rate and reports non-amortizing payments", () => {
+  const result = amortizationSchedule({ balance: 1200, interestRate: 12 }, "2026-10-17", { payment: 120, rateChanges: { 2: 24 } });
+  assert.equal(result.rows[0].interest, 12);
+  assert.equal(result.rows[1].interest, 21.84);
+  assert.equal(result.rows.at(-1).balance, 0);
+  assert.equal(amortizationSchedule({ balance: 10000, interestRate: 24 }, "2026-10-17", { payment: 100 }).neverPaysOff, true);
 });
 
 test("goal contribution plan reports full monthly coverage", () => {
@@ -26,6 +65,14 @@ test("goal contribution plan reports full monthly coverage", () => {
   assert.equal(result.months, 12);
   assert.equal(result.coverage, 1);
   assert.equal(result.status, "Plan reaches target");
+});
+
+test("goal contribution plan adjusts the target for inflation", () => {
+  const result = contributionPlan({ target: 100000, dueDate: "2027-10-17", plannedMonthly: 8750, inflationRate: 5 }, 0, "2026-10-17");
+  assert.equal(result.months, 12);
+  assert.equal(result.adjustedTarget, 105000);
+  assert.equal(result.requiredMonthly, 8750);
+  assert.equal(result.coverage, 1);
 });
 
 test("tax calculation applies rebate and cess in the correct order", () => {
@@ -103,11 +150,28 @@ test("budget plan uses completed-month income and active commitments", () => {
   assert.deepEqual(summary, { plannedIncome: 100000, budgetTotal: 30000, recurringTotal: 12000, unallocated: 58000 });
 });
 
+test("budget commitments exclude income and repeated subscription IDs", () => {
+  const shared = { id: "bill", amount: 100, cadence: "monthly", active: true };
+  const result = envelopeSummary({ budgets: [], recurring: [shared, { id: "salary", type: "income", amount: 1000, cadence: "monthly" }], subscriptions: [{ ...shared }], plannedIncome: 1000, suggestedIncome: 0, monthlyEquivalent });
+  assert.equal(result.recurringTotal, 100);
+  assert.equal(result.unallocated, 900);
+});
+
 test("recurring costs normalize different cadences", () => {
   assert.equal(monthlyEquivalent(1200, "annual"), 100);
   assert.equal(monthlyEquivalent(300, "quarterly"), 100);
   assert.equal(monthlyEquivalent(100, "weekly"), 5200 / 12);
   assert.equal(nextOccurrence("2026-01-31", "monthly", 31, "2026-02-01"), "2026-02-28");
+  assert.equal(nextOccurrence("2026-01-31", "monthly", 31, "2026-03-01"), "2026-03-31");
+  assert.equal(monthlyEquivalent(600, "half-yearly"), 100);
+  assert.equal(monthlyEquivalent(10, "custom", 10), 30.4375);
+});
+
+test("shared schedule selection keeps a subscription recorded in two lists once", () => {
+  const item = { id: "shared", name: "Service", amount: 100 };
+  const result = uniqueSchedules({ recurring: [item], subscriptions: [{ ...item }] });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].kind, "recurring");
 });
 
 test("recurring detection finds a consistent monthly subscription", () => {
@@ -138,6 +202,10 @@ test("financial review schedules preserve due dates at month end", () => {
   assert.equal(nextScheduledDate("2027-01-31", "monthly"), "2027-02-28");
   assert.equal(nextScheduledDate("2026-02-28", "annual"), "2027-02-28");
   assert.equal(nextScheduledDate("2026-10-01", "biweekly"), "2026-10-15");
+  assert.equal(nextScheduledDate("2028-02-28", "daily"), "2028-02-29");
+  assert.equal(nextScheduledDate("2026-01-31", "half-yearly"), "2026-07-31");
+  assert.equal(nextScheduledDate("2026-10-01", "custom", 10), "2026-10-11");
+  assert.equal(nextScheduledDate("2026-02-28", "monthly", undefined, 31), "2026-03-31");
 });
 
 test("financial review estimates income and avoids double-counting recurring expenses", () => {
@@ -164,6 +232,32 @@ test("cash-flow forecast applies scheduled payments within the selected range", 
   assert.equal(result.minBalance, 40000);
 });
 
+test("cash-flow forecast includes planned goals, investments, savings and one-time obligations", () => {
+  const settings = { recurring: [], subscriptions: [], goals: [{ id: "g", name: "Goal", plannedMonthly: 100, status: "Active" }], investments: [{ id: "i", name: "Fund", monthlyContribution: 200 }], savingsInstruments: [{ id: "s", name: "Deposit", monthlyContribution: 50 }], datesToRemember: [{ id: "o", name: "Tax", date: "2026-11-10", amount: 300 }] };
+  const result = cashFlowForecast(settings, [], 1000, 60, "2026-10-26");
+  assert.ok(result.events.some(event => event.kind === "goal")); assert.ok(result.events.some(event => event.kind === "investment")); assert.ok(result.events.some(event => event.kind === "savings")); assert.ok(result.events.some(event => event.kind === "obligation"));
+  assert.ok(result.monthlyBreakdown.length > 0); assert.ok(Array.isArray(result.shortageDates));
+});
+
+test("forecast treats scheduled salary as income without repeating historical salary", () => {
+  const settings = { recurring: [{ id: "salary", name: "Employer", type: "income", amount: 90000, cadence: "monthly", nextDate: "2026-10-20", active: true }], subscriptions: [] };
+  const transactions = [{ date: "2026-09-20", type: "income", merchant: "Employer", amount: 90000 }];
+  const result = cashFlowForecast(settings, transactions, 1000, 10, "2026-10-17");
+  assert.equal(result.incomeMonthly, 0);
+  assert.equal(result.totalIncome, 90000);
+  assert.equal(result.totalScheduled, 0);
+  assert.equal(result.ending, 91000);
+});
+
+test("forecast counts a shared recurring and subscription schedule once", () => {
+  const schedule = { id: "shared", name: "Service", amount: 600, cadence: "monthly", nextDate: "2026-10-20", active: true };
+  const settings = { recurring: [schedule], subscriptions: [{ ...schedule }] };
+  const result = cashFlowForecast(settings, [], 1000, 10, "2026-10-17", { monthlyEquivalent });
+  assert.equal(result.events.length, 1);
+  assert.equal(result.totalScheduled, 600);
+  assert.equal(expenseForecast([], settings, "2026-10-17", { monthlyEquivalent }).recurringTotal, 600);
+});
+
 test("wealth summary combines accounts, holdings and savings without double counting", () => {
   const settings = {
     netWorthAccounts: [{ type: "asset", balance: 50000 }, { type: "liability", balance: 20000 }],
@@ -173,6 +267,17 @@ test("wealth summary combines accounts, holdings and savings without double coun
   const result = combinedNetWorth(settings, "2026-10-17");
   assert.deepEqual(result, { assets: 90000, liabilities: 20000, net: 70000, investmentsValue: 30000, savingsValue: 10000, accountAssets: 50000 });
   assert.equal(investmentSummary(settings.investments).totalReturn, 6000);
+});
+
+test("net worth counts a holding linked to a saved asset account once", () => {
+  const settings = {
+    netWorthAccounts: [{ id: "property", type: "asset", balance: 5000000 }],
+    investments: [{ linkedAccountId: "property", currentValue: 5000000, costBasis: 4500000, assetClass: "Real Estate" }, { currentValue: 100000, costBasis: 90000, assetClass: "Equity" }],
+    savingsInstruments: []
+  };
+  const result = combinedNetWorth(settings, "2026-10-17");
+  assert.equal(result.assets, 5100000);
+  assert.equal(result.investmentsValue, 100000);
 });
 
 test("wealth maturity and concentration warnings cover important risks", () => {

@@ -4,6 +4,7 @@ import { isInboxSnoozed, readInboxSnoozes, snoozeInboxItem, writeInboxSnoozes } 
 import { readSplitInbox } from "./split-inbox.js";
 import { groupInboxItems } from "./inbox-groups.js";
 import { buildSetupSteps, setupGuideStorageKey } from "./setup-guide.js";
+import { uniqueSchedules } from "../recurring/calculations.js";
 
 function snoozeStorage() { try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; } }
 
@@ -11,6 +12,8 @@ export function createDashboardCommandCentre(deps) {
 const { ArrowDownRight, ArrowUpRight, Button, CalendarClock, Card, ChevronDown, CreditCard, DONUT_COLORS, EmptyState, INVESTMENT_CLASS_COLORS, LayoutDashboard, Modal, PeriodSelector, PiggyBank, ProgressBar, Receipt, Repeat, ShieldAlert, SlidersHorizontal, Sparkles, SummaryCard, Target, TrendingUp, Wallet, computeCombinedNetWorth, computeFinancials, computeInvestmentSummary, computeMonthlyInsight, detectRecurringCandidates, dtBuildInstances, formatCurrency, formatDateDisplay, hasSystemTag, isCategoryEssential, isSelfTransfer, isStaleAccount, liabilityEffectivePayment, monthKey, monthlyEquivalent, nowISO, todayYMD, upsertNetWorthSnapshot, useFlashColor, supabaseClient } = deps;
 function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSaveSettings, onOpenSplit, onOpenImport, importIssue, fin, nw, savingsRate, periodTx }) {
   const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [editingLayout, setEditingLayout] = useState("desktop");
+  const [mobileViewport, setMobileViewport] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches);
   const [hiddenInboxKeys, setHiddenInboxKeys] = useState([]);
   const [expandedInboxGroups, setExpandedInboxGroups] = useState([]);
   const [setupHidden, setSetupHidden] = useState(() => { try { return window.localStorage.getItem(setupGuideStorageKey(userId)) === "1"; } catch { return false; } });
@@ -18,14 +21,44 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
   const [snoozeNow, setSnoozeNow] = useState(Date.now());
   const [snoozeError, setSnoozeError] = useState("");
   useEffect(() => { const timer = setInterval(() => setSnoozeNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = event => setMobileViewport(event.matches);
+    setMobileViewport(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const defaultOrder = ["netWorth", "income", "spending", "savingsRate", "debt", "recurring"];
   const savedOrder = Array.isArray(settings.dashboardCardOrder) ? settings.dashboardCardOrder : [];
   const order = [...savedOrder.filter(id => defaultOrder.includes(id)), ...defaultOrder.filter(id => !savedOrder.includes(id))];
   const hidden = Array.isArray(settings.dashboardHiddenCards) ? settings.dashboardHiddenCards : [];
+  const mobileSavedOrder = Array.isArray(settings.dashboardMobileCardOrder) ? settings.dashboardMobileCardOrder : [];
+  const mobileOrder = [...mobileSavedOrder.filter(id => defaultOrder.includes(id)), ...defaultOrder.filter(id => !mobileSavedOrder.includes(id))];
+  const mobileHidden = Array.isArray(settings.dashboardMobileHiddenCards) ? settings.dashboardMobileHiddenCards : [];
+  const editorOrder = editingLayout === "mobile" ? mobileOrder : order;
+  const editorHidden = editingLayout === "mobile" ? mobileHidden : hidden;
+  const hiddenPanels = Array.isArray(settings.dashboardHiddenPanels) ? settings.dashboardHiddenPanels : [];
+  const panelVisible = id => !hiddenPanels.includes(id);
+  const defaultPanels = ["inbox", "commitments"];
+  const savedPanels = [...new Set(Array.isArray(settings.dashboardPanelOrder) ? settings.dashboardPanelOrder.filter(id => defaultPanels.includes(id)) : [])];
+  const panelOrder = [...savedPanels.filter(id => defaultPanels.includes(id)), ...defaultPanels.filter(id => !savedPanels.includes(id))];
+  const panelPosition = id => panelOrder.indexOf(id);
+  function togglePanel(id) {
+    const next = hiddenPanels.includes(id) ? hiddenPanels.filter(item => item !== id) : [...hiddenPanels, id];
+    onSaveSettings({ dashboardHiddenPanels: next });
+  }
+  function movePanel(id, direction) {
+    const next = [...panelOrder];
+    const index = next.indexOf(id);
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onSaveSettings({ dashboardPanelOrder: next });
+  }
   const liabilities = (settings.netWorthAccounts || []).filter(a => a.type === "liability" && (Number(a.balance) || 0) > 0);
   const debtTotal = liabilities.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
   const debtMonthly = liabilities.reduce((sum, a) => sum + liabilityEffectivePayment(a), 0);
-  const recurringMonthly = [...(settings.recurring || []).filter(r => r.active !== false), ...(settings.subscriptions || []).filter(s => s.active !== false)].reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.cadence), 0);
+  const recurringMonthly = uniqueSchedules(settings).filter(item => item.active !== false && item.type !== "income").reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.cadence, item.intervalDays), 0);
   const today = todayYMD();
   const periodLabel = ({ "this-month": "this month", "last-month": "last month", "last-3-months": "last 3 months", "last-6-months": "last 6 months", "this-year": "this year", "all-time": "all time" })[settings.selectedPeriod] || "selected period";
   const inbox = buildActionInbox({ transactions, settings, today, dateInstances: typeof dtBuildInstances === "function" ? dtBuildInstances(settings.datesToRemember || [], today) : [], isSelfTransfer, isRefund: transaction => hasSystemTag(transaction, "Refund") });
@@ -87,18 +120,18 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
     debt: { id: "debt", label: "Current saved outstanding debt", rawValue: debtTotal, formatter: formatCurrency, sub: liabilities.length ? `${formatCurrency(debtMonthly)}/month required` : "No active liabilities", icon: CreditCard, tone: "orange" },
     recurring: { id: "recurring", label: "Projected recurring · monthly", rawValue: recurringMonthly, formatter: formatCurrency, sub: "Estimated monthly equivalent", icon: Repeat, tone: "indigo" }
   };
-  const visibleCards = order.filter(id => !hidden.includes(id) && cards[id]);
+  const visibleCards = (mobileViewport ? mobileOrder : order).filter(id => !(mobileViewport ? mobileHidden : hidden).includes(id) && cards[id]);
   function toggleCard(id) {
-    const next = hidden.includes(id) ? hidden.filter(item => item !== id) : [...hidden, id];
-    if (next.length < defaultOrder.length) onSaveSettings({ dashboardHiddenCards: next });
+    const next = editorHidden.includes(id) ? editorHidden.filter(item => item !== id) : [...editorHidden, id];
+    if (next.length < defaultOrder.length) onSaveSettings({ [editingLayout === "mobile" ? "dashboardMobileHiddenCards" : "dashboardHiddenCards"]: next });
   }
   function moveCard(id, direction) {
-    const next = [...order];
+    const next = [...editorOrder];
     const index = next.indexOf(id);
     const target = index + direction;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    onSaveSettings({ dashboardCardOrder: next });
+    onSaveSettings({ [editingLayout === "mobile" ? "dashboardMobileCardOrder" : "dashboardCardOrder"]: next });
   }
   const attentionTone = tone => tone === "rose" ? "border-rose-200 bg-rose-50 text-rose-700" : tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-indigo-200 bg-indigo-50 text-indigo-700";
   return React.createElement(React.Fragment, null,
@@ -110,7 +143,7 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
         ),
         React.createElement("button", { onClick: () => setCustomiseOpen(true), className: "min-h-11 px-3 rounded-xl border border-slate-200 bg-white text-[12.5px] font-medium text-slate-600 hover:border-indigo-300 hover:text-indigo-700 flex items-center gap-1.5" }, React.createElement(SlidersHorizontal, { size: 14 }), "Customise")
       ),
-      React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" }, visibleCards.map(id => React.createElement(SummaryCard, { ...cards[id], key: id })))
+      React.createElement("div", { className: "fin-current-position-grid" }, visibleCards.map(id => React.createElement("div", { key: id }, React.createElement(SummaryCard, { ...cards[id] }))))
     ),
     transactions.length < 5 && setupDone < setupSteps.length && React.createElement(Card, { className: "p-5" },
       React.createElement("div", { className: "flex items-start justify-between gap-3" },
@@ -123,7 +156,8 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
         !step.done && React.createElement("button", { type: "button", onClick: () => onGoTo(step.tab), className: "min-h-11 text-[12px] font-semibold text-indigo-700 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" }, step.action)
       )))
     ),
-    React.createElement(Card, { className: "p-5" },
+    React.createElement("div", { className: "grid grid-cols-1 xl:grid-cols-2 gap-4" },
+    panelVisible("inbox") && React.createElement(Card, { className: `p-5 xl:col-span-2 ${["order-0", "order-1", "order-2"][panelPosition("inbox")]}` },
       React.createElement("h2", { className: "text-[15px] font-semibold text-slate-800" }, "Action inbox"),
       React.createElement("p", { className: "text-[12px] text-slate-500 mt-1 mb-3" }, "Saved transactions and schedules that may need your attention. Scheduled amounts are projections, not recorded transactions."),
       hiddenInboxKeys.length > 0 && React.createElement("p", { role: "status", className: "text-[12px] text-slate-500" }, `${hiddenInboxKeys.length} item${hiddenInboxKeys.length === 1 ? "" : "s"} hidden for this visit. Saved records are unchanged.`),
@@ -143,7 +177,7 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
           React.createElement("button", { type: "button", onClick: () => setHiddenInboxKeys(keys => [...keys, item.key]), "aria-label": `Hide ${item.title} for this visit`, title: "Hide for this visit", className: "min-h-11 min-w-11 rounded-xl border border-slate-200 bg-white text-slate-600 text-xl hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" }, "×"))
       )))))) : allInboxItems.length ? React.createElement("p", { className: "text-[13px] text-slate-500" }, "All action items are hidden or snoozed on this device. Use the controls above to restore them.") : splitState.status === "ready" ? React.createElement("p", { className: "text-[13px] text-slate-500" }, "No action items found in the loaded Finance and Split records.") : React.createElement("p", { className: "text-[13px] text-slate-500" }, "No Finance action items found. Split status is not yet confirmed.")
     ),
-    React.createElement("div", { className: "grid grid-cols-1 xl:grid-cols-5 gap-4" },
+    panelVisible("commitments") && React.createElement("div", { className: "grid grid-cols-1 xl:grid-cols-5 gap-4 xl:col-span-2", style: { order: panelPosition("commitments") } },
       React.createElement(Card, { className: "p-5 xl:col-span-3" },
         React.createElement("div", { className: "flex items-center justify-between gap-3 mb-3" },
           React.createElement("div", null, React.createElement("h3", { className: "text-[14px] font-semibold text-slate-700 flex items-center gap-1.5" }, React.createElement(CalendarClock, { size: 14, className: "text-indigo-500" }), "Upcoming commitments · next 30 days"), React.createElement("p", { className: "text-[11.5px] text-slate-400 mt-0.5" }, "Projected from saved recurring items and loan due days; not recorded spending")),
@@ -157,10 +191,13 @@ function DashboardCommandCentre({ userId, transactions, settings, onGoTo, onSave
         attention.length > 0 && React.createElement("div", { className: "space-y-2" }, attention.slice(0, 3).map(item => React.createElement("div", { key: item.id, className: `rounded-xl border px-3 py-2.5 ${attentionTone(item.tone)}` }, React.createElement("p", { className: "text-[12.5px] font-semibold" }, item.title), React.createElement("p", { className: "text-[11.5px] opacity-80 mt-0.5" }, item.detail), React.createElement("button", { onClick: () => onGoTo(item.tab), className: "text-[11.5px] font-semibold mt-1.5 hover:underline" }, item.action, " →")))),
         React.createElement("div", { className: "mt-3 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5" }, React.createElement("p", { className: "text-[11.5px] text-slate-500" }, "This month's recorded margin"), React.createElement("p", { className: `text-[17px] font-semibold mt-0.5 ${recordedMargin >= 0 ? "text-emerald-600" : "text-rose-600"}` }, formatCurrency(recordedMargin)), React.createElement("p", { className: "text-[10.5px] text-slate-400 mt-0.5" }, "Recorded income minus recorded spending; upcoming payments are shown separately."))
       )
-    ),
+    )),
     React.createElement(Modal, { open: customiseOpen, onClose: () => setCustomiseOpen(false), title: "Customise dashboard", width: "max-w-lg" },
-      React.createElement("p", { className: "text-[12.5px] text-slate-500 mb-4" }, "Choose which summary cards appear and arrange them in the order you prefer."),
-      React.createElement("div", { className: "space-y-2" }, order.map((id, index) => React.createElement("div", { key: id, className: "flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5" }, React.createElement("input", { type: "checkbox", checked: !hidden.includes(id), onChange: () => toggleCard(id), className: "accent-indigo-600 w-4 h-4", "aria-label": `Show ${cards[id].label} card` }), React.createElement("span", { className: "text-[13px] font-medium text-slate-700 flex-1" }, cards[id].label), React.createElement("button", { disabled: index === 0, onClick: () => moveCard(id, -1), className: "w-8 h-8 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30", "aria-label": `Move ${cards[id].label} up` }, "↑"), React.createElement("button", { disabled: index === order.length - 1, onClick: () => moveCard(id, 1), className: "w-8 h-8 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30", "aria-label": `Move ${cards[id].label} down` }, "↓")))),
+      React.createElement("p", { className: "text-[12.5px] text-slate-500 mb-3" }, "Arrange and hide summary cards separately for phones and larger screens."),
+      React.createElement("div", { className: "flex gap-2 mb-3" }, [["desktop", "Larger screens"], ["mobile", "Phones"]].map(([id, label]) => React.createElement("button", { key: id, type: "button", onClick: () => setEditingLayout(id), "aria-pressed": editingLayout === id, className: `min-h-10 px-3 rounded-lg border text-[12px] ${editingLayout === id ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}` }, label))),
+      editingLayout === "desktop" && React.createElement("label", { className: "block text-[12px] text-slate-600 mb-3" }, "Wide screen columns ", React.createElement("select", { className: "h-10 ml-2 rounded-lg border border-slate-300 px-2", value: settings.dashboardDesktopColumns === 2 ? 2 : 3, onChange: event => onSaveSettings({ dashboardDesktopColumns: Number(event.target.value) }) }, [2, 3].map(value => React.createElement("option", { key: value, value }, value)))),
+      React.createElement("fieldset", { className: "mb-3 rounded-xl border border-slate-200 p-3" }, React.createElement("legend", { className: "px-1 text-[12px] font-semibold text-slate-700" }, "Dashboard panels"), panelOrder.map((id, index) => React.createElement("div", { key: id, className: "flex min-h-10 items-center gap-2 text-[12px] text-slate-700" }, React.createElement("input", { type: "checkbox", checked: panelVisible(id), onChange: () => togglePanel(id), "aria-label": `Show ${id} panel`, className: "h-4 w-4 accent-indigo-600" }), React.createElement("span", { className: "flex-1" }, ({ inbox: "Action inbox", commitments: "Upcoming commitments and warnings" })[id]),  React.createElement("button", { type: "button", disabled: index === 0, onClick: () => movePanel(id, -1), "aria-label": `Move ${id} panel up`, className: "h-8 w-8 rounded-lg border border-slate-200 disabled:opacity-30" }, "↑"), React.createElement("button", { type: "button", disabled: index === panelOrder.length - 1, onClick: () => movePanel(id, 1), "aria-label": `Move ${id} panel down`, className: "h-8 w-8 rounded-lg border border-slate-200 disabled:opacity-30" }, "↓")))),
+      React.createElement("div", { className: "space-y-2" }, editorOrder.map((id, index) => React.createElement("div", { key: id, className: "flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5" }, React.createElement("input", { type: "checkbox", checked: !editorHidden.includes(id), onChange: () => toggleCard(id), className: "accent-indigo-600 w-4 h-4", "aria-label": `Show ${cards[id].label} card on ${editingLayout}` }), React.createElement("span", { className: "text-[13px] font-medium text-slate-700 flex-1" }, cards[id].label), React.createElement("button", { disabled: index === 0, onClick: () => moveCard(id, -1), className: "w-8 h-8 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30", "aria-label": `Move ${cards[id].label} up on ${editingLayout}` }, "↑"), React.createElement("button", { disabled: index === editorOrder.length - 1, onClick: () => moveCard(id, 1), className: "w-8 h-8 rounded-lg border border-slate-200 text-slate-500 disabled:opacity-30", "aria-label": `Move ${cards[id].label} down on ${editingLayout}` }, "↓")))),
       React.createElement("div", { className: "flex justify-end mt-4" }, React.createElement(Button, { variant: "primary", onClick: () => setCustomiseOpen(false) }, "Done"))
     )
   );

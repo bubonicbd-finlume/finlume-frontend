@@ -61,3 +61,47 @@ test("timeline ranks net spending categories and ignores transfers", () => {
   ] });
   assert.deepEqual(result.spendingCategories, [{ category: "Housing", amount: 100 }, { category: "Groceries", amount: 20 }]);
 });
+
+test("timeline expands custom recurring dates and marks a matched payment recorded", () => {
+  const result = buildTimeline({ month: "2026-10", today: "2026-10-25", transactions: [{ id: "rent-21", date: "2026-10-21", merchant: "Rent", type: "expense", amount: 100 }], settings: { recurring: [{ id: "rent", name: "Rent", amount: 100, nextDate: "2026-10-11", cadence: "custom", intervalDays: 10 }], subscriptions: [] } });
+  const scheduled = result.events.filter(event => event.id.startsWith("Recurring:"));
+  assert.deepEqual(scheduled.map(event => event.date), ["2026-10-11", "2026-10-21", "2026-10-31"]);
+  assert.equal(scheduled[1].status, "recorded");
+  assert.equal(result.outgoing, 200);
+});
+
+test("timeline shows skipped recurring occurrences without counting them", () => {
+  const result = buildTimeline({
+    month: "2026-10",
+    today: "2026-10-25",
+    transactions: [],
+    settings: { recurring: [{ id: "rent", name: "Rent", amount: 100, type: "expense", cadence: "monthly", nextDate: "2026-11-25", skippedOccurrences: ["2026-10-25"], active: true }], subscriptions: [], netWorthAccounts: [], goals: [] }
+  });
+  const skipped = result.events.find(event => event.status === "skipped");
+  assert.equal(skipped.date, "2026-10-25");
+  assert.equal(skipped.counted, false);
+  assert.equal(result.outgoing, 0);
+});
+
+test("timeline includes subscription trial boundaries", () => {
+  const result = buildTimeline({
+    month: "2026-10",
+    today: "2026-10-20",
+    transactions: [],
+    settings: { recurring: [], subscriptions: [{ id: "trial", name: "Music", amount: 99, cadence: "monthly", nextDate: "2026-11-01", trialEndDate: "2026-10-28", active: true }], netWorthAccounts: [], goals: [] }
+  });
+  const event = result.events.find(item => item.id.startsWith("trial:"));
+  assert.equal(event.status, "upcoming");
+  assert.equal(event.counted, false);
+  assert.equal(event.tab, "recurring");
+});
+
+test("timeline includes liability maturity, investment and savings contributions with targets", () => {
+  const result = buildTimeline({ month: "2026-10", today: "2026-10-10", settings: {
+    netWorthAccounts: [{ id: "loan", name: "Car loan", type: "liability", category: "Vehicle Loan", balance: 1000, paymentDueDay: 15, endDate: "2026-10-31" }],
+    investments: [{ id: "fund", name: "Index fund", monthlyContribution: 200 }], savingsInstruments: [{ id: "rd", name: "Recurring deposit", monthlyContribution: 100 }]
+  }, liabilityPayment: () => 50 });
+  assert.ok(result.events.some(event => event.id.startsWith("maturity:loan") && event.entityId === "loan"));
+  assert.ok(result.events.some(event => event.id.startsWith("investment:fund") && event.amount === 200));
+  assert.ok(result.events.some(event => event.id.startsWith("savings:rd") && event.amount === 100));
+});

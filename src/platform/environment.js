@@ -23,7 +23,11 @@ export function readEnvironment(viteEnvironment) {
     throw error;
   }
 
-  return Object.freeze({ supabaseUrl, supabaseKey });
+  return Object.freeze({
+    supabaseUrl,
+    supabaseKey,
+    auditLedgerEnabled: clean(viteEnvironment.VITE_AUDIT_LEDGER_ENABLED).toLowerCase() === "true",
+  });
 }
 
 export function addSupabasePreconnect(supabaseUrl) {

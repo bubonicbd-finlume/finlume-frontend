@@ -4,7 +4,7 @@ export async function confirmTransactionDelete(ids, { readTransactions, saveTran
   const removed = before.filter(row => wanted.has(row.id));
   if (!removed.length) { setTransactions(before); return []; }
   const next = before.filter(row => !wanted.has(row.id));
-  if (await saveTransactions(next)) { setTransactions(next); return removed; }
+  if (await saveTransactions(next, removed)) { setTransactions(next); return removed; }
   let after;
   try { after = await readTransactions(); }
   catch { throw new Error("The delete result could not be confirmed. Reconnect and review Transactions before retrying."); }
@@ -18,7 +18,7 @@ export async function confirmTransactionUndo(removed, { readTransactions, saveTr
   const missing = removed.filter(row => !before.some(saved => saved.id === row.id));
   if (!missing.length) { setTransactions(before); return; }
   const next = [...missing, ...before];
-  if (await saveTransactions(next)) { setTransactions(next); return; }
+  if (await saveTransactions(next, missing)) { setTransactions(next); return; }
   let after;
   try { after = await readTransactions(); }
   catch { throw new Error("The Undo result could not be confirmed. Reconnect and review Transactions."); }

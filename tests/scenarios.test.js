@@ -11,8 +11,27 @@ test("scenarios leave saved records intact and compare extra payments", () => {
   assert.ok(alternative.ending < baseline.ending);
   assert.ok(alternative.payoffMonths <= baseline.payoffMonths);
   assert.ok(alternative.goalProjected > baseline.goalProjected);
+  assert.ok(alternative.projectedInterest <= baseline.projectedInterest);
+  assert.ok(alternative.debtPaidEstimate >= baseline.debtPaidEstimate);
+  assert.equal(typeof alternative.projectedNetWorth, "number");
   assert.equal(JSON.stringify({ transactions, settings }), before);
   const summary = safeScenarioSummary([baseline, alternative], 90);
   assert.doesNotMatch(summary, /Private|private-id|private-loan|private-goal/);
   assert.equal(JSON.parse(summary).scenarios.length, 2);
+});
+
+test("salary changes affect scheduled income without changing saved salary", () => {
+  const settings = { recurring: [{ id: "salary", name: "Employer", type: "income", amount: 1000, nextDate: "2026-10-25", cadence: "monthly", active: true }], subscriptions: [] };
+  const before = JSON.stringify(settings);
+  const baseline = compareScenario({ transactions: [], settings, today: "2026-10-25", opening: 0, days: 30, assumptions: { incomePercent: 0, spendingPercent: 0, extraDebt: 0, extraGoal: 0 } });
+  const raised = compareScenario({ transactions: [], settings, today: "2026-10-25", opening: 0, days: 30, assumptions: { incomePercent: 10, spendingPercent: 0, extraDebt: 0, extraGoal: 0 } });
+  assert.equal(raised.ending - baseline.ending, 100);
+  assert.equal(JSON.stringify(settings), before);
+});
+
+test("extra scenario contributions affect cash on monthly dates", () => {
+  const base = { transactions: [], settings: { recurring: [], subscriptions: [] }, today: "2026-10-25", opening: 1000, days: 40 };
+  const result = compareScenario({ ...base, assumptions: { incomePercent: 0, spendingPercent: 0, extraDebt: 100, extraGoal: 50 } });
+  assert.equal(result.ending, 850);
+  assert.equal(result.minimum, 850);
 });

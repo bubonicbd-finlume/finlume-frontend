@@ -44,6 +44,15 @@ test("extracted embedded Goals view renders a saved goal", () => {
   assert.match(html, /monthly/);
 });
 
+test("goal form includes inflation, priority and status planning fields", () => {
+  const Page = createGoalsPage({ ...deps, ManageEntryModal: ({ fields, initial }) => React.createElement("div", null, fields.map(field => field.name).join(","), ":" + initial.priority + ":" + initial.status) });
+  const html = renderToString(React.createElement(Page, { mode: "goals", settings: { goals: [] }, transactions: [], onSaveSettings() {} }));
+  assert.match(html, /inflationRate/);
+  assert.match(html, /priority/);
+  assert.match(html, /status/);
+  assert.match(html, /:Medium:Active/);
+});
+
 test("extracted goal what-if dialog renders an isolated scenario", () => {
   const WhatIf = createGoalWhatIf(deps);
   const html = renderToString(React.createElement(WhatIf, {

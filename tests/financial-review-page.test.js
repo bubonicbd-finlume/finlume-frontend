@@ -47,5 +47,5 @@ test("extracted reconciliation view shows account status", () => {
 test("extracted forecast view renders without scheduled items", () => {
   const html = render("forecast");
   assert.match(html, /Cash-flow Forecast/);
-  assert.match(html, /No dated recurring payments/);
+  assert.match(html, /No dated recurring entries/);
 });

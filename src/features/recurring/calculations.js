@@ -1,6 +1,21 @@
 const SUBSCRIPTION_HINTS = ["netflix", "spotify", "hulu", "disney", "youtube", "icloud", "dropbox", "adobe", "microsoft", "amazon prime", "patreon", "membership", "studio", "gym", "openai", "chatgpt", "canva", "notion", "zoom", "slack", "github"];
 const RECURRING_HINTS = ["mortgage", "rent", "loan", "insurance", "utility", "utilities", "electric", "water", "internet", "phone", "mobile", "daycare", "tuition", "lease", "car payment", "auto payment", "hoa", "property tax"];
 
+export function uniqueSchedules(settings = {}) {
+  const seen = new Set();
+  const items = [];
+  for (const [list, sourceKind] of [[settings.recurring, "recurring"], [settings.subscriptions, "subscription"]]) {
+    for (const item of Array.isArray(list) ? list : []) {
+      if (!item) continue;
+      const key = item.id ? `id:${item.id}` : `detail:${String(item.name || "").trim().toLowerCase()}|${item.nextDate || ""}|${item.cadence || "monthly"}|${item.amount || 0}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ ...item, kind: sourceKind });
+    }
+  }
+  return items;
+}
+
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -18,19 +33,22 @@ function addDays(value, days) {
   return date.toISOString().slice(0, 10);
 }
 
-function fallbackAddMonths(value, count) {
+function fallbackAddMonths(value, count, anchorDay) {
   const [year, month, day] = String(value).split("-").map(Number);
   const first = new Date(Date.UTC(year, month - 1 + count, 1));
   const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  first.setUTCDate(Math.min(day, lastDay));
+  first.setUTCDate(Math.min(anchorDay || day, lastDay));
   return first.toISOString().slice(0, 10);
 }
 
-export function monthlyEquivalent(value, cadence) {
+export function monthlyEquivalent(value, cadence, intervalDays) {
   const amount = Number(value) || 0;
+  if (cadence === "daily") return amount * 365.25 / 12;
+  if (cadence === "custom") return amount * 30.4375 / Math.max(1, Number(intervalDays) || 1);
   if (cadence === "weekly") return amount * 52 / 12;
   if (cadence === "biweekly") return amount * 26 / 12;
   if (cadence === "quarterly") return amount / 3;
+  if (cadence === "half-yearly" || cadence === "semiannual") return amount / 6;
   if (cadence === "annual") return amount / 12;
   return amount;
 }
@@ -46,7 +64,8 @@ export function classifyCadence(intervalDays) {
 
 export function nextOccurrence(lastDate, cadence, typicalInterval, today, addMonths = fallbackAddMonths) {
   const monthStep = { monthly: 1, quarterly: 3, annual: 12 }[cadence];
-  const advance = value => monthStep ? addMonths(value, monthStep) : addDays(value, Math.round(typicalInterval));
+  const anchorDay = Number(String(lastDate).slice(-2));
+  const advance = value => monthStep ? addMonths(value, monthStep, anchorDay) : addDays(value, Math.round(typicalInterval));
   let nextDate = advance(lastDate);
   let guard = 0;
   while (nextDate < today && guard++ < 200) nextDate = advance(nextDate);

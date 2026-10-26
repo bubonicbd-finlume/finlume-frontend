@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import { financeNavGroup } from "./finance-navigation.js";
+import { FINANCE_NAV_GROUPS, financeNavGroup } from "./finance-navigation.js";
 
 export function GroupedMobileNav({ active, onNavigate, tabs }) {
   const [open, setOpen] = useState(false);
@@ -25,7 +25,7 @@ export function GroupedMobileNav({ active, onNavigate, tabs }) {
   }, [open]);
   function choose(id) { setOpen(false); onNavigate(id); setTimeout(() => document.getElementById("main-content")?.focus(), 0); }
   const navButton = tab => React.createElement("button", { key: tab.id, type: "button", onClick: () => choose(tab.id), "aria-label": tab.label, "aria-current": active === tab.id ? "page" : undefined, className: `fin-mobile-nav-item fin-mobile-nav-btn-${tab.id} min-h-14 min-w-0 flex-1 flex flex-col items-center justify-center gap-1 px-1 text-[10px] font-medium ${active === tab.id ? "is-active text-white" : "text-indigo-200/80"}` }, React.createElement(tab.icon, { size: 18 }), React.createElement("span", { className: "block w-full truncate" }, ({ dashboard: "Home", transactions: "Entries", timeline: "Timeline", settings: "Settings" })[tab.id] || tab.label));
-  const groups = ["Overview", "Activity", "Planning", "Account"];
+  const groups = FINANCE_NAV_GROUPS;
   return ReactDOM.createPortal(React.createElement(React.Fragment, null,
     open && React.createElement("div", { className: "fixed inset-0 z-40 md:hidden", style: { backgroundColor: "rgba(9, 6, 26, 0.82)" }, onClick: () => { setOpen(false); moreRef.current?.focus(); } },
       React.createElement("div", { ref: dialogRef, role: "dialog", "aria-modal": "true", "aria-label": "More Finance pages", className: "fin-mobile-more-dialog absolute bottom-16 inset-x-3 max-h-[min(75vh,600px)] overflow-y-auto rounded-2xl p-4 shadow-2xl", style: { backgroundColor: "#211848", color: "#fff" }, onClick: event => event.stopPropagation() },

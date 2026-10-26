@@ -1,3 +1,5 @@
+import { fromMinor, safeMinor, sumMoney } from "../../platform/money.js";
+
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -10,15 +12,15 @@ function parseDate(value) {
 
 export function investmentSummary(investments) {
   const list = investments || [];
-  const totalCostBasis = list.reduce((sum, holding) => sum + number(holding.costBasis), 0);
-  const totalCurrentValue = list.reduce((sum, holding) => sum + number(holding.currentValue), 0);
-  const totalDividends = list.reduce((sum, holding) => sum + number(holding.dividends), 0);
-  const gain = totalCurrentValue - totalCostBasis;
-  const totalReturn = gain + totalDividends;
+  const totalCostBasis = sumMoney(list.map(holding => holding.costBasis));
+  const totalCurrentValue = sumMoney(list.map(holding => holding.currentValue));
+  const totalDividends = sumMoney(list.map(holding => holding.dividends));
+  const gain = fromMinor(safeMinor(totalCurrentValue) - safeMinor(totalCostBasis));
+  const totalReturn = fromMinor(safeMinor(gain) + safeMinor(totalDividends));
   const byClass = new Map();
   for (const holding of list) {
     const assetClass = holding.assetClass || "Other";
-    byClass.set(assetClass, (byClass.get(assetClass) || 0) + number(holding.currentValue));
+    byClass.set(assetClass, fromMinor(safeMinor(byClass.get(assetClass)) + safeMinor(holding.currentValue)));
   }
   return {
     totalCostBasis,
@@ -44,11 +46,11 @@ export function maturityInfo(instrument, today, dueSoonDays = 30) {
 
 export function savingsSummary(instruments, today, dueSoonDays = 30) {
   const active = (instruments || []).filter(instrument => instrument.status !== "Withdrawn");
-  const totalPrincipal = active.reduce((sum, instrument) => sum + number(instrument.principal), 0);
+  const totalPrincipal = sumMoney(active.map(instrument => instrument.principal));
   const byInstitution = new Map();
   for (const instrument of active) {
     const institution = instrument.institution || "Unspecified";
-    byInstitution.set(institution, (byInstitution.get(institution) || 0) + number(instrument.principal));
+    byInstitution.set(institution, fromMinor(safeMinor(byInstitution.get(institution)) + safeMinor(instrument.principal)));
   }
   const upcoming = active
     .filter(instrument => instrument.maturityDate)
@@ -59,20 +61,21 @@ export function savingsSummary(instruments, today, dueSoonDays = 30) {
 }
 
 export function accountSummary(accounts) {
-  const assets = (accounts || []).filter(account => account.type === "asset").reduce((sum, account) => sum + number(account.balance), 0);
-  const liabilities = (accounts || []).filter(account => account.type === "liability").reduce((sum, account) => sum + number(account.balance), 0);
-  return { assets, liabilities, net: assets - liabilities };
+  const assets = sumMoney((accounts || []).filter(account => account.type === "asset").map(account => account.balance));
+  const liabilities = sumMoney((accounts || []).filter(account => account.type === "liability").map(account => account.balance));
+  return { assets, liabilities, net: fromMinor(safeMinor(assets) - safeMinor(liabilities)) };
 }
 
 export function combinedNetWorth(settings, today, dueSoonDays = 30) {
   const accounts = accountSummary(settings.netWorthAccounts);
-  const investments = investmentSummary(settings.investments);
+  const accountIds = new Set((settings.netWorthAccounts || []).filter(account => account.type === "asset").map(account => account.id).filter(Boolean));
+  const investments = investmentSummary((settings.investments || []).filter(holding => !holding.linkedAccountId || !accountIds.has(holding.linkedAccountId)));
   const savings = savingsSummary(settings.savingsInstruments, today, dueSoonDays);
-  const assets = accounts.assets + investments.totalCurrentValue + savings.totalPrincipal;
+  const assets = fromMinor(safeMinor(accounts.assets) + safeMinor(investments.totalCurrentValue) + safeMinor(savings.totalPrincipal));
   return {
     assets,
     liabilities: accounts.liabilities,
-    net: assets - accounts.liabilities,
+    net: fromMinor(safeMinor(assets) - safeMinor(accounts.liabilities)),
     investmentsValue: investments.totalCurrentValue,
     savingsValue: savings.totalPrincipal,
     accountAssets: accounts.assets
@@ -107,3 +110,4 @@ export function allocationDrift(investments, targetAllocation, assetClasses) {
     })
     .filter(row => row.actual > 0 || row.target > 0);
 }
+

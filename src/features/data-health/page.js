@@ -1,14 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { inspectDataHealth } from "./calculations.js";
+import { auditExportJson, financialAuditFeed, mapServerAuditRows } from "../../platform/settings-audit.js";
 
 export function createDataHealthPage({ Card }) {
-  return function DataHealthPage({ onReadHealthData, onGoTo, onReviewTransaction, importIssue, saveError }) {
+  return function DataHealthPage({ onReadHealthData, onReadServerAudit, onGoTo, onReviewTransaction, importIssue, saveError }) {
     const [state, setState] = useState({ status: "loading" });
     const [retry, setRetry] = useState(0);
     useEffect(() => {
       let active = true;
       setState({ status: "loading" });
-      Promise.resolve().then(onReadHealthData).then(snapshot => { if (active) setState({ status: "ready", findings: inspectDataHealth(snapshot), checkedAt: new Date() }); })
+      Promise.resolve().then(onReadHealthData).then(async snapshot => {
+        if (!active) return;
+        let serverRows = [];
+        let auditLedgerError = "";
+        if (onReadServerAudit) {
+          try { serverRows = mapServerAuditRows(await onReadServerAudit()); }
+          catch (error) { auditLedgerError = error?.message || "The server audit ledger could not be read."; }
+        }
+        if (active) setState({ status: "ready", findings: inspectDataHealth(snapshot), audit: financialAuditFeed(snapshot.transactions, snapshot.settings, serverRows), auditLedgerError, checkedAt: new Date() });
+      })
         .catch(error => { if (active) setState({ status: "failed", message: error?.message || "The cloud data could not be read." }); });
       return () => { active = false; };
     }, [onReadHealthData, retry]);
@@ -17,6 +27,31 @@ export function createDataHealthPage({ Card }) {
       ...(saveError ? [{ key: "save", title: "A save was not confirmed", detail: saveError, tab: "settings", severity: "error", preview: { affected: "The last reported save attempt in this browser session", proposed: "Refresh the affected screen and compare with confirmed cloud values before retrying.", preserved: "No save is retried from this page." } }] : [])
     ];
     const findings = state.status === "ready" ? [...sessionFindings, ...state.findings] : sessionFindings;
+    function exportAudit() {
+      if (state.status !== "ready" || !state.audit.length) return;
+      const blob = new Blob([auditExportJson(state.audit)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `finlume-audit-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    function renderChange(change, index) {
+      const collection = change.collection;
+      const affectedIds = [...(collection?.ids || []), ...(collection?.addedIds || []), ...(collection?.removedIds || [])];
+      return React.createElement("li", { key: index },
+        change.field, ": ", JSON.stringify(change.from), " → ", JSON.stringify(change.to),
+        collection ? ` (${collection.beforeCount ?? ""} → ${collection.afterCount ?? ""} entries; ${collection.updated?.length || 0} edited)` : "",
+        affectedIds.length > 0 && React.createElement("details", { className: "mt-1" },
+          React.createElement("summary", { className: "cursor-pointer min-h-8 inline-flex items-center font-medium" }, "Show affected record IDs"),
+          React.createElement("pre", { className: "whitespace-pre-wrap break-all rounded bg-white p-2" }, JSON.stringify({ ids: affectedIds, addedIds: collection?.addedIds || [], removedIds: collection?.removedIds || [] }, null, 2))),
+        collection?.updated?.length > 0 && React.createElement("details", { className: "mt-1" },
+          React.createElement("summary", { className: "cursor-pointer min-h-8 inline-flex items-center font-medium" }, "Show edited records"),
+          React.createElement("pre", { className: "whitespace-pre-wrap break-all rounded bg-white p-2" }, JSON.stringify(collection.updated, null, 2))));
+    }
     return React.createElement("div", { className: "p-4 md:p-8 pb-28 max-w-5xl mx-auto space-y-4" },
       React.createElement("header", null, React.createElement("button", { type: "button", className: "min-h-11 text-[12px] font-semibold text-indigo-700 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600", onClick: () => onGoTo("settings") }, "← Settings"), React.createElement("h1", { className: "text-2xl font-semibold text-slate-800" }, "Data Health Centre"), React.createElement("p", { className: "text-[13px] text-slate-500 mt-1" }, "Review possible problems before changing saved data. Nothing on this page repairs or removes records automatically.")),
       React.createElement(Card, { className: "p-4" },
@@ -28,7 +63,19 @@ export function createDataHealthPage({ Card }) {
         findings.length ? React.createElement("ul", { className: "space-y-2" }, findings.map(item => React.createElement("li", { key: item.key, className: `rounded-xl border p-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2 ${item.severity === "error" ? "border-rose-200 bg-rose-50" : item.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}` },
           React.createElement("div", { className: "min-w-0" }, React.createElement("p", { className: "text-[13px] font-semibold text-slate-800" }, item.title), React.createElement("p", { className: "text-[12px] text-slate-600 break-words" }, item.detail), item.preview && React.createElement("details", { className: "mt-2 text-[12px] text-slate-700" }, React.createElement("summary", { className: "cursor-pointer min-h-11 inline-flex items-center font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" }, "Preview review steps"), React.createElement("dl", { className: "space-y-1 rounded-lg border border-slate-200 bg-white p-3 break-words" }, React.createElement("dt", { className: "font-semibold" }, "Affected"), React.createElement("dd", null, item.preview.affected), React.createElement("dt", { className: "font-semibold" }, "Proposed next step"), React.createElement("dd", null, item.preview.proposed), React.createElement("dt", { className: "font-semibold" }, "Preserved"), React.createElement("dd", null, item.preview.preserved))), item.targets?.length > 0 && onReviewTransaction && React.createElement("div", { className: "mt-2 flex flex-wrap gap-2" }, item.targets.map(target => React.createElement("button", { key: target.id, type: "button", className: "min-h-11 px-3 rounded-xl border border-indigo-200 bg-white text-[12px] font-semibold text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600", onClick: () => onReviewTransaction(target.id) }, `Review ${target.label}`)))),
           React.createElement("button", { type: "button", className: "self-start min-h-11 px-3 rounded-xl bg-white border border-slate-200 text-[12px] font-semibold text-indigo-700 shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600", onClick: () => onGoTo(item.tab) }, `Review ${item.tab}`)
-        ))) : React.createElement("p", { className: "text-[13px] text-slate-500" }, "No data issues found in the confirmed cloud read."))
+        ))) : React.createElement("p", { className: "text-[13px] text-slate-500" }, "No data issues found in the confirmed cloud read.")),
+      state.status === "ready" && React.createElement(Card, { className: "p-4" },
+        React.createElement("div", { className: "flex flex-wrap items-center justify-between gap-2" }, React.createElement("h2", { className: "text-[15px] font-semibold text-slate-800" }, "Financial record history"), React.createElement("button", { type: "button", disabled: !state.audit.length, onClick: exportAudit, className: "min-h-11 px-3 rounded-xl border border-indigo-200 text-indigo-700 text-[12px] font-semibold disabled:opacity-50" }, "Export history")),
+        React.createElement("p", { className: "text-[12px] text-slate-500 mt-1 mb-3" }, "Up to 200 recent saved transaction edits and settings changes. Older records may predate this history."),
+        state.auditLedgerError && React.createElement("p", { role: "status", className: "text-[12px] text-amber-700 mb-3" }, "Server audit history is unavailable: ", state.auditLedgerError),
+        state.audit.length ? React.createElement("ol", { className: "space-y-2" },
+          state.audit.slice(0, 50).map(item => React.createElement("li", { key: item.id, className: "rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px]" },
+            React.createElement("p", { className: "font-semibold text-slate-700" }, item.entity || item.source, " · ", new Date(item.at).toLocaleString()),
+            React.createElement("p", { className: "text-slate-500" }, item.actor || "Account owner", " · ", item.source),
+            React.createElement("ul", { className: "mt-1 text-slate-600" }, (item.changes || []).map(renderChange))
+          ))
+        ) : React.createElement("p", { className: "text-[12px] text-slate-500" }, "No history is available for these saved records yet.")
+      )
     );
   };
 }

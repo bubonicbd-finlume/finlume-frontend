@@ -48,6 +48,28 @@ test("extracted recurring page renders a confirmed item", () => {
   assert.match(html, /₹12000/);
 });
 
+test("recurring form exposes income, custom intervals and pause or cancel status", () => {
+  const Page = createRecurringSubscriptionsPage({ ...deps, ManageEntryModal: ({ fields, initial }) => React.createElement("div", null, fields.map(field => field.name).join(","), `:${initial.status}`) });
+  const html = renderToString(React.createElement(Page, { transactions: [], settings: emptySettings, onSaveSettings() {}, userId: null }));
+  assert.match(html, /type,status,name/);
+  assert.match(html, /intervalDays/);
+  assert.match(html, /trialStartDate/);
+  assert.match(html, /trialEndDate/);
+  assert.match(html, /:active/);
+});
+
+test("a due schedule offers explicit confirmed posting", () => {
+  const Page = createRecurringSubscriptionsPage(deps);
+  const html = renderToString(React.createElement(Page, { transactions: [], settings: { ...emptySettings, recurring: [{ id: "rent", name: "Rent", amount: 100, cadence: "monthly", nextDate: "2026-10-17", active: true }] }, onSaveSettings() {}, onPostRecurringOccurrence() {}, userId: null }));
+  assert.match(html, /Record due/);
+});
+
+test("due schedule confirmation includes a skip action", () => {
+  const Page = createRecurringSubscriptionsPage(deps);
+  const html = renderToString(React.createElement(Page, { transactions: [], settings: { ...emptySettings, recurring: [{ id: "rent", name: "Rent", amount: 100, cadence: "monthly", nextDate: "2026-10-17", active: true }] }, onSaveSettings() {}, onPostRecurringOccurrence() {}, onSkipRecurringOccurrence() {}, userId: null }));
+  assert.match(html, /Skip occurrence/);
+});
+
 test("extracted suggestion and link dialog render candidate data", () => {
   const Suggestion = createSuggestionCard(deps);
   const LinkModal = createLinkTransactionModal(deps);
